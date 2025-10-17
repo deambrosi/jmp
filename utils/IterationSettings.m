@@ -18,21 +18,24 @@ function settings = IterationSettings()
 % =========================================================================
 
     %% Iteration counters and convergence values
-    settings.it		= 0;
-    settings.diffV	= 1;
+    settings.it         = 0;
+    settings.diffV      = 1;
 
     %% Tolerances
-    settings.tolV	= 0.5;
-    settings.tolM	= 1e-2;
+    settings.tolV       = 0.5;
+    settings.tolM       = 1e-2;
 
     %% Iteration limits
-    settings.MaxItV	= 40;
-    settings.MaxItJ	= 3;
-    settings.MaxIter= 100;
+    settings.MaxItV     = 40;
+    settings.MaxItJ     = 3;
+    settings.MaxIter    = 100;
 
     %% Simulation settings
-    settings.Nagents= 5000;
-    settings.T		= 100;
-    settings.burn	= 50;
+    settings.Nagents    = 5000;
+    settings.T          = 100;
+    settings.burn       = 50;
+
+    %% Display controls
+    settings.showDynamicEqmProgress = false;
 
 end

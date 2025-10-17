@@ -18,7 +18,13 @@ function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibriumVarCost(M0
     time_weights    = beta_weight .^ (0:T-1);
     time_weights    = time_weights / sum(time_weights);
 
-    fprintf('\nSolving Dynamic Equilibrium with migration cost shock...\n');
+    showProgress = true;
+    if isfield(settings, 'showDynamicEqmProgress')
+        showProgress = logical(settings.showDynamicEqmProgress);
+    end
+    if showProgress
+        fprintf('\nSolving Dynamic Equilibrium with migration cost shock...\n');
+    end
     while (diffM > settings.tolM) && (it_count < settings.MaxItJ)
         it_count = it_count + 1;
 
@@ -30,7 +36,9 @@ function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibriumVarCost(M0
         diffM      = sum(time_weights .* diff_per_t);
         M_eqm      = M_new;
 
-        fprintf('  Iteration %d: Weighted diffM = %.6f\n', it_count, diffM);
+        if showProgress
+            fprintf('  Iteration %d: Weighted diffM = %.6f\n', it_count, diffM);
+        end
     end
 
     pol_eqm = pol_new;

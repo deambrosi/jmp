@@ -42,7 +42,13 @@ function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibrium(M0, vf_te
     time_weights    = time_weights / sum(time_weights);% Normalize to sum to 1
 
     %% 2. Iteration Loop
-    fprintf('\nSolving Dynamic Equilibrium...\n');
+    showProgress = true;
+    if isfield(settings, 'showDynamicEqmProgress')
+        showProgress = logical(settings.showDynamicEqmProgress);
+    end
+    if showProgress
+        fprintf('\nSolving Dynamic Equilibrium...\n');
+    end
     while (diffM > settings.tolM) && (it_count < settings.MaxItJ)
         it_count = it_count + 1;
 
@@ -66,7 +72,9 @@ function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibrium(M0, vf_te
         M_eqm      = M_new;
 
         % Step 5: Print status
-        fprintf('  Iteration %d: Weighted diffM = %.6f\n', it_count, diffM);
+        if showProgress
+            fprintf('  Iteration %d: Weighted diffM = %.6f\n', it_count, diffM);
+        end
     end
 
     % Final output
