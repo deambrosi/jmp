@@ -1,0 +1,328 @@
+%% matchingMoments.m — Calibrate model parameters to match data moments
+% This script iterates over blocks of parameters to minimize the distance
+% between simulated and empirical moments.
+
+clc; clear; close all;
+rng(12345);  % Reproducibility for the Monte Carlo simulation
+
+
+
+
+%cd('~/work/sample_proj/code');
+%addpath(genpath(pwd));
+
+
+fprintf('*** Matching model moments ***\n');
+
+%% 1. Load baseline configuration and data
+dims        = setDimensionParam();
+baseParams  = SetParameters(dims);
+dataRaw     = setDataMoments();
+[lbStruct, ubStruct] = SetParameterBounds();
+lbStruct    = normalizeBoundFields(lbStruct);
+ubStruct    = normalizeBoundFields(ubStruct);
+
+locIndices  = (2:dims.N)';
+numLoc      = numel(locIndices);
+
+dataMoments = struct();
+dataMoments.average_income    = dataRaw.average_income(:);
+dataMoments.share_of_migrants = dataRaw.share_of_migrants(:);
+dataMoments.came_directly     = dataRaw.came_directly(:);
+dataMoments.came_with_help    = NaN(numLoc, 1);
+
+helpLocations   = [2, 3, 4, 6];                  % No survey data for location 5
+helpMask        = ismember(locIndices, helpLocations);
+dataMoments.came_with_help(helpMask) = dataRaw.came_with_help(:);
+
+momentWeights = struct();
+momentWeights.average_income    = ones(numLoc, 1);
+momentWeights.share_of_migrants = ones(numLoc, 1);
+momentWeights.came_directly     = ones(numLoc, 1);
+momentWeights.came_with_help    = ones(numLoc, 1);
+momentWeights.came_with_help(~helpMask) = 0;     % Ignore missing locations
+
+%% 2. Simulation options
+simOptions = struct();
+simOptions.targetPeriod      = 20;               % Target horizon for cross-sectional comparisons
+simOptions.incomeWindow      = 20;               % Rolling window for average income
+simOptions.overrideSettings  = struct('Nagents', 3000);
+
+%% 3. Initialize calibratable parameters
+calibParams = struct();
+calibParams.A            = baseParams.A;
+calibParams.B            = baseParams.B;
+calibParams.tilde_ttau   = baseParams.tilde_ttau;
+calibParams.hat_ttau     = baseParams.hat_ttau;
+calibParams.baseUp_eta   = baseParams.baseUp_eta;
+calibParams.baseUp_psi   = baseParams.baseUp_psi;
+calibParams.ggamma       = baseParams.ggamma;
+calibParams.cchi         = baseParams.cchi;
+
+%% 4. Baseline evaluation
+fprintf('Simulating baseline configuration...\n');
+currentMoments   = simulatedMoments(calibParams, simOptions);
+momentNames      = {'average_income','share_of_migrants','came_directly','came_with_help'};
+allMomentSpecs   = buildAllMomentSpecs(momentNames);
+baselineLoss     = computeTotalLoss(currentMoments, dataMoments, momentWeights, allMomentSpecs);
+
+history = struct('params', calibParams, 'moments', currentMoments, 'loss', baselineLoss);
+
+%% 5. Iterative calibration loop
+tolParam        = 1e-3;
+maxOuterIter    = 8;
+penaltyWeight   = 0.05;
+
+incomeIdx   = 2:numLoc;     % Locations 3–6
+shareIdx    = 1:numLoc;     % All non-Venezuelan locations
+directIdx   = 1:numLoc;
+helpIdx     = find(helpMask);
+
+blockStep2 = struct('name','A','index',3:dims.N);
+blockStep3 = [
+    struct('name','B','index',3:dims.N);
+    struct('name','tilde_ttau','index',1:(dims.N-1));
+    struct('name','hat_ttau','index',1:dims.N);
+    struct('name','baseUp_eta','index',1);
+    struct('name','baseUp_psi','index',1)
+    ];
+blockStep4 = [
+    struct('name','ggamma','index',1);
+    struct('name','cchi','index',1)
+    ];
+
+targetStep2 = struct('name','average_income','indices',incomeIdx);
+targetStep3 = [
+    struct('name','share_of_migrants','indices',shareIdx);
+    struct('name','came_directly','indices',directIdx)
+    ];
+targetStep4 = struct('name','came_with_help','indices',helpIdx);
+
+for iter = 1:maxOuterIter
+    fprintf('\n=== Outer iteration %d ===\n', iter);
+    prevParamVec = collectParameterVector(calibParams);
+
+    referenceMoments = currentMoments;
+    [calibParams, currentMoments, lossIncome] = optimizeBlock( ...
+        calibParams, blockStep2, targetStep2, dataMoments, momentWeights, ...
+        lbStruct, ubStruct, simOptions, penaltyWeight, referenceMoments, momentNames);
+    fprintf('  Productivity block loss: %.6f\n', lossIncome);
+
+    referenceMoments = currentMoments;
+    [calibParams, currentMoments, lossMigrants] = optimizeBlock( ...
+        calibParams, blockStep3, targetStep3, dataMoments, momentWeights, ...
+        lbStruct, ubStruct, simOptions, penaltyWeight, referenceMoments, momentNames);
+    fprintf('  Migration frictions block loss: %.6f\n', lossMigrants);
+
+    referenceMoments = currentMoments;
+    [calibParams, currentMoments, lossHelp] = optimizeBlock( ...
+        calibParams, blockStep4, targetStep4, dataMoments, momentWeights, ...
+        lbStruct, ubStruct, simOptions, penaltyWeight, referenceMoments, momentNames);
+    fprintf('  Help parameters block loss: %.6f\n', lossHelp);
+
+    totalLoss = computeTotalLoss(currentMoments, dataMoments, momentWeights, allMomentSpecs);
+    fprintf('  Total weighted loss: %.6f\n', totalLoss);
+
+    history(end+1) = struct('params', calibParams, 'moments', currentMoments, 'loss', totalLoss); %#ok<SAGROW>
+
+    paramDiff = max(abs(collectParameterVector(calibParams) - prevParamVec));
+    fprintf('  Max parameter change: %.3e\n', paramDiff);
+
+    if paramDiff < tolParam
+        fprintf('Convergence tolerance reached. Stopping iterations.\n');
+        break;
+    end
+end
+
+fprintf('\nFinal calibrated parameters:\n');
+disp(calibParams);
+
+fprintf('\nFinal simulated moments (columns 2–6 correspond to locations 2–6):\n');
+disp(currentMoments);
+
+fprintf('Target data moments (aligned with simulated ordering):\n');
+disp(dataMoments);
+
+save('estimationresults.mat');
+
+
+%% ------------------------------------------------------------------------
+%% Local helper functions
+function vec = collectParameterVector(params)
+    vec = [params.A(:);
+           params.B(:);
+           params.tilde_ttau(:);
+           params.hat_ttau(:);
+           params.baseUp_eta;
+           params.baseUp_psi;
+           params.ggamma;
+           params.cchi];
+end
+
+function [paramsOut, momentsOut, targetLoss] = optimizeBlock( ...
+        paramsIn, blockSpec, targetSpecs, dataMoments, weights, ...
+        lowerBounds, upperBounds, simOptions, penaltyWeight, ...
+        referenceMoments, allMomentNames)
+
+    [lbVec, ubVec] = gatherBoundsVector(paramsIn, blockSpec, lowerBounds, upperBounds);
+    theta0          = getBlockVector(paramsIn, blockSpec);
+    z0              = invertBoundsVector(theta0, lbVec, ubVec);
+
+    objective = @(z) blockObjective(z);
+
+    opts = optimset('Display','iter','TolX',1e-2,'TolFun',1e-2, ...
+                    'MaxFunEvals',50*numel(z0),'MaxIter',50);
+
+    [zOpt, ~] = fminsearch(objective, z0, opts);
+
+    newValues  = applyBoundsVector(zOpt, lbVec, ubVec);
+    paramsOut  = setBlockVector(paramsIn, blockSpec, newValues);
+    momentsOut = simulatedMoments(paramsOut, simOptions);
+    targetLoss = computeMomentLoss(momentsOut, dataMoments, weights, targetSpecs, 1);
+
+    function loss = blockObjective(z)
+        candidateValues = applyBoundsVector(z, lbVec, ubVec);
+        candidateParams = setBlockVector(paramsIn, blockSpec, candidateValues);
+        try
+            candidateMoments = simulatedMoments(candidateParams, simOptions);
+        catch
+            loss = 1e9;
+            return;
+        end
+        targetLossInner  = computeMomentLoss(candidateMoments, dataMoments, weights, targetSpecs, 1);
+        penaltySpecs     = buildPenaltySpecs(allMomentNames, targetSpecs);
+        penaltyLoss      = computeMomentLoss(candidateMoments, referenceMoments, weights, penaltySpecs, penaltyWeight);
+        loss             = targetLossInner + penaltyLoss;
+    end
+end
+
+function specs = buildPenaltySpecs(allNames, targetSpecs)
+    targetNames   = {targetSpecs.name};
+    penaltyNames  = setdiff(allNames, targetNames, 'stable');
+    specs         = repmat(struct('name','', 'indices',[]), numel(penaltyNames), 1);
+    for i = 1:numel(penaltyNames)
+        specs(i).name    = penaltyNames{i};
+        specs(i).indices = [];
+    end
+end
+
+function [lowerVec, upperVec] = gatherBoundsVector(params, blockSpec, lowerStruct, upperStruct)
+    lowerVec = [];
+    upperVec = [];
+    for k = 1:numel(blockSpec)
+        field     = blockSpec(k).name;
+        idx       = blockSpec(k).index;
+        lowField  = expandBoundField(lowerStruct, params, field);
+        upField   = expandBoundField(upperStruct,  params, field);
+        lowerVec  = [lowerVec; lowField(idx(:))];
+        upperVec  = [upperVec; upField(idx(:))];
+    end
+end
+
+function boundVec = expandBoundField(bounds, params, fieldName)
+    if ~isfield(bounds, fieldName)
+        error('Bound for parameter "%s" is missing.', fieldName);
+    end
+    boundValue = bounds.(fieldName);
+    paramValue = params.(fieldName);
+    if isscalar(boundValue)
+        boundVec = repmat(boundValue, numel(paramValue), 1);
+    else
+        boundVec = boundValue(:);
+    end
+end
+
+function vec = getBlockVector(params, blockSpec)
+    vec = [];
+    for k = 1:numel(blockSpec)
+        field = blockSpec(k).name;
+        idx   = blockSpec(k).index;
+        value = params.(field);
+        if isscalar(value)
+            vec = [vec; value];
+        else
+            vec = [vec; value(idx(:))];
+        end
+    end
+end
+
+function paramsOut = setBlockVector(paramsIn, blockSpec, values)
+    paramsOut = paramsIn;
+    cursor    = 1;
+    for k = 1:numel(blockSpec)
+        field  = blockSpec(k).name;
+        idx    = blockSpec(k).index;
+        count  = numel(idx);
+        if isscalar(paramsOut.(field))
+            paramsOut.(field) = values(cursor);
+        else
+            temp = paramsOut.(field);
+            temp(idx) = reshape(values(cursor:cursor+count-1), size(temp(idx)));
+            paramsOut.(field) = temp;
+        end
+        cursor = cursor + count;
+    end
+end
+
+function x = applyBoundsVector(z, lower, upper)
+    x = lower + (upper - lower) ./ (1 + exp(-z));
+end
+
+function z = invertBoundsVector(x, lower, upper)
+    ratio = (x - lower) ./ (upper - lower);
+    ratio = min(max(ratio, 1e-6), 1 - 1e-6);
+    z     = log(ratio ./ (1 - ratio));
+end
+
+function loss = computeMomentLoss(modelMoments, targetMoments, weights, specs, scale)
+    if nargin < 5
+        scale = 1;
+    end
+    loss = 0;
+    for k = 1:numel(specs)
+        name = specs(k).name;
+        idx  = specs(k).indices;
+        [modelVec, targetVec, weightVec] = extractMomentVectors(modelMoments, targetMoments, weights, name, idx);
+        mask = ~isnan(modelVec) & ~isnan(targetVec) & (weightVec > 0);
+        if any(mask)
+            diff = modelVec(mask) - targetVec(mask);
+            loss = loss + scale * sum((diff.^2) .* weightVec(mask));
+        end
+    end
+end
+
+function [modelVec, targetVec, weightVec] = extractMomentVectors(model, target, weights, name, indices)
+    modelVecFull  = model.(name);
+    targetVecFull = target.(name);
+    weightVecFull = weights.(name);
+    if isempty(indices)
+        indices = 1:numel(modelVecFull);
+    end
+    modelVec  = modelVecFull(indices);
+    targetVec = targetVecFull(indices);
+    weightVec = weightVecFull(indices);
+end
+
+function specs = buildAllMomentSpecs(allNames)
+    specs = repmat(struct('name','', 'indices',[]), numel(allNames), 1);
+    for k = 1:numel(allNames)
+        specs(k).name    = allNames{k};
+        specs(k).indices = [];
+    end
+end
+
+function totalLoss = computeTotalLoss(modelMoments, dataMoments, weights, specs)
+    totalLoss = computeMomentLoss(modelMoments, dataMoments, weights, specs, 1);
+end
+
+function bounds = normalizeBoundFields(bounds)
+    renamePairs = {'baseUP_eta','baseUp_eta'; 'baseUP_psi','baseUp_psi'};
+    for i = 1:size(renamePairs, 1)
+        oldName = renamePairs{i,1};
+        newName = renamePairs{i,2};
+        if isfield(bounds, oldName)
+            bounds.(newName) = bounds.(oldName);
+            bounds = rmfield(bounds, oldName);
+        end
+    end
+end
