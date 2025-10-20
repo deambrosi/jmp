@@ -197,6 +197,19 @@ function [paramsOut, momentsOut, targetLoss] = optimizeBlock( ...
 %   Gauss–Newton step supplemented by optional penalties that keep auxiliary
 %   moments close to the reference simulation.
 
+    % Compose human-readable labels so progress can be streamed to the
+    % command window while the expensive simulations are running.
+    blockNames = arrayfun(@(s) s.name, blockSpec, 'UniformOutput', false);
+    blockLabel = strjoin(unique(blockNames, 'stable'), ', ');
+
+    targetNames = arrayfun(@(s) s.name, targetSpecs, 'UniformOutput', false);
+    targetLabel = strjoin(unique(targetNames, 'stable'), ', ');
+    if isempty(targetLabel)
+        targetLabel = '(none)';
+    end
+
+    fprintf('  Optimizing block {%s} targeting {%s}...\n', blockLabel, targetLabel);
+
     % Map the block parameters to the unconstrained "z" space used by the
     % logistic transform so that Gauss–Newton steps can move freely.
     [lbVec, ubVec] = gatherBoundsVector(paramsIn, blockSpec, lowerBounds, upperBounds);
@@ -205,10 +218,15 @@ function [paramsOut, momentsOut, targetLoss] = optimizeBlock( ...
 
     % Evaluate the baseline residuals and keep track of the best candidate
     % encountered during the Gauss–Newton search.
+    evaluationCounter = 0;
     [currentEval, success] = evaluateCandidate(zCurrent);
     if ~success
         error('Baseline simulation for block optimisation failed.');
     end
+
+    fprintf(['    Initial loss: total %.6f (target %.6f, penalty %.6f) ' ...
+             'using step norm 0.000e+00.\n'], ...
+            currentEval.loss, currentEval.targetLoss, currentEval.penaltyLoss);
 
     maxIter        = 10;
     stepTolerance  = 1e-4;
@@ -225,6 +243,7 @@ function [paramsOut, momentsOut, targetLoss] = optimizeBlock( ...
         deltaZ = -normalMatrix \ grad;
 
         if norm(deltaZ) < stepTolerance
+            fprintf('    GN iter %d: step norm %.3e below tolerance; stopping.\n', k, norm(deltaZ));
             break;  % No meaningful improvement expected
         end
 
@@ -233,6 +252,9 @@ function [paramsOut, momentsOut, targetLoss] = optimizeBlock( ...
         stepSize   = 1;
         improved   = false;
         maxBacktrack = 6;
+        fprintf(['    GN iter %d: current total %.6f (target %.6f, penalty %.6f); ' ...
+                 'attempting step with norm %.3e.\n'], ...
+                k, currentEval.loss, currentEval.targetLoss, currentEval.penaltyLoss, norm(deltaZ));
         for attempt = 1:maxBacktrack
             zTrial = zCurrent + stepSize * deltaZ;
             [trialEval, ok] = evaluateCandidate(zTrial);
@@ -240,14 +262,19 @@ function [paramsOut, momentsOut, targetLoss] = optimizeBlock( ...
                 zCurrent   = zTrial;
                 currentEval = trialEval;
                 improved   = true;
+                fprintf(['      Accepted step size %.3f -> total %.6f ' ...
+                         '(target %.6f, penalty %.6f).\n'], ...
+                        stepSize, currentEval.loss, currentEval.targetLoss, currentEval.penaltyLoss);
                 break;
             end
             stepSize = stepSize / 2;
+            fprintf('      Backtracking step; new tentative size %.3f.\n', stepSize);
         end
 
         if ~improved
             % The Gauss–Newton step failed to improve the objective. Exit the
             % loop and keep the current parameters.
+            fprintf('    GN iter %d: no improving step found; terminating block optimisation.\n', k);
             break;
         end
     end
@@ -266,6 +293,7 @@ function [paramsOut, momentsOut, targetLoss] = optimizeBlock( ...
         candidateValues = applyBoundsVector(zVec, lbVec, ubVec);
         candidateParams = setBlockVector(paramsIn, blockSpec, candidateValues);
         result = struct();
+        evaluationCounter = evaluationCounter + 1;
         try
             candidateMoments = simulatedMoments(candidateParams, simOptions);
         catch
@@ -274,6 +302,7 @@ function [paramsOut, momentsOut, targetLoss] = optimizeBlock( ...
             result.loss       = Inf;
             result.targetLoss = Inf;
             result.moments    = [];
+            fprintf('      [%s] Simulation %d failed (model error).\n', blockLabel, evaluationCounter);
             return;
         end
 
@@ -292,6 +321,10 @@ function [paramsOut, momentsOut, targetLoss] = optimizeBlock( ...
         result.penaltyLoss = penaltyLossLocal;
         result.residual    = [targetResidual; penaltyResidual];
         result.loss        = sum(result.residual.^2);
+        fprintf(['      [%s] Simulation %d complete: total %.6f ' ...
+                 '(target %.6f, penalty %.6f).\n'], ...
+                blockLabel, evaluationCounter, result.loss, ...
+                result.targetLoss, result.penaltyLoss);
         ok = true;
     end
 end
@@ -311,7 +344,8 @@ function J = computeJacobian(fun, basePoint, baseResidual, stepSize)
             if ~okBackward
                 % If both perturbations fail, leave the column zeroed so the
                 % Gauss–Newton step can still proceed using available
-                % directions.
+                % directions, and note the issue for the command window log.
+                fprintf('        Jacobian column %d: both perturbations failed; column left zeroed.\n', j);
                 continue;
             else
                 J(:, j) = (evalBackward.residual - baseResidual) / (-stepSize);
