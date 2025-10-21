@@ -33,7 +33,7 @@ function [grids, indexes] = setGridsAndIndices(dims)
 
     %% 1. Asset Grids (coarse and fine)
     lb.a		= 0;          % Lower bound of asset holdings
-    ub.a		= 40;         % Upper bound of asset holdings
+    ub.a		= 32;         % Upper bound of asset holdings
     ca			= 3;          % Curvature for coarse grid
 
     grids.agrid	= nodeunif(dims.Na, 0, (ub.a - lb.a)^(1/ca)).^ca + lb.a;

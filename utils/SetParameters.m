@@ -41,12 +41,12 @@ function params = SetParameters(dims, overrides)
     %% Migration cost primitives
     params.tilde_ttau = [5; 3; 9];
     params.hat_ttau   = [3; 1; 2; 7];
-    params.aalpha     = 0.5;
+    params.aalpha     = 0.75;
     params.nnu        = 0.1;
 
     %% Network-related parameters
     params.ggamma     = 0.25;
-    params.cchi       = 0.05;
+    params.cchi       = 0.03;
 
     %% Markov shocks
     params.baseUp_eta = 0.10;
