@@ -68,4 +68,81 @@ end
 
 plotOutcomeCase(M_total, M_network, agentData, dims, settings, 'benchmark');
 
-t=
+%% 6. Transportation Aid Counterfactual
+fprintf('\nEvaluating transportation-aid counterfactual...\n');
+
+transportAid = struct();
+transportAid.type            = 'transport';
+transportAid.startPeriod     = 5;                               % Aid becomes available from period 5 onwards
+transportAid.wealthThreshold = 4;                               % Eligible if asset index ≤ 4
+transportAid.massIncrease    = 0.04 * ones(dims.N, 1);          % Additional migrant mass outside destination 2
+transportAid.massIncrease(2) = 0;                               % No artificial mass for location 2
+transportAid.budget          = 350;                             % Total funds E for the program
+
+try
+    [pol_transport, M_transport, it_transport, ~] = solveDynamicEquilibrium( ...
+        M0, vf_nh, m0, dims, params, grids, indexes, matrices, settings, transportAid);
+    fprintf('Transportation-aid equilibrium solved in %d iterations.\n', it_transport);
+catch ME
+    error('Error solving transport-aid counterfactual: %s', ME.message);
+end
+
+G_transport_base = zeros(dims.H, settings.T);
+G_transport_aug  = zeros(dims.H, settings.T);
+for t = 1:settings.T
+    G_transport_base(:, t) = computeG(M_transport(:, t), params.ggamma);
+    if t >= transportAid.startPeriod
+        G_transport_aug(:, t) = computeG(M_transport(:, t) + transportAid.massIncrease, params.ggamma);
+    else
+        G_transport_aug(:, t) = G_transport_base(:, t);
+    end
+end
+
+[M_total_transport, M_network_transport, agentDataTransport, statsTransport] = ...
+    simulateAgentsTransportAid(m0, pol_transport, G_transport_base, G_transport_aug, ...
+    dims, params, grids, settings, transportAid);
+
+plotOutcomeCase(M_total_transport, M_network_transport, agentDataTransport, ...
+    dims, settings, 'transport_aid');
+
+fprintf('  Accepted moves with aid: %d\n', statsTransport.acceptedMoves);
+fprintf('  Aid spent: %.2f (budget remaining: %.2f)\n', ...
+    statsTransport.totalAidSpent, statsTransport.finalBudget);
+
+%% 7. Food-and-Shelter Aid Counterfactual
+fprintf('\nEvaluating food-and-shelter aid counterfactual...\n');
+
+shelterAid = struct();
+shelterAid.type             = 'shelter';
+shelterAid.startPeriod      = 4;             % Transfers available from period 4
+shelterAid.wealthThreshold  = 5;             % Eligible if asset index ≤ 5
+shelterAid.transferAmount   = 0.75;          % Wealth transfer when aid is granted
+shelterAid.grantProbability = 0.35;          % Probability of receiving a transfer
+shelterAid.budget           = 250;           % Total funds for the program
+
+try
+    [pol_shelter, M_shelter, it_shelter, ~] = solveDynamicEquilibrium( ...
+        M0, vf_nh, m0, dims, params, grids, indexes, matrices, settings, shelterAid);
+    fprintf('Shelter-aid equilibrium solved in %d iterations.\n', it_shelter);
+catch ME
+    error('Error solving shelter-aid counterfactual: %s', ME.message);
+end
+
+G_shelter = zeros(dims.H, settings.T);
+for t = 1:settings.T
+    G_shelter(:, t) = computeG(M_shelter(:, t), params.ggamma);
+end
+
+[M_total_shelter, M_network_shelter, agentDataShelter, statsShelter] = ...
+    simulateAgentsShelterAid(m0, pol_shelter, G_shelter, dims, params, grids, settings, shelterAid);
+
+plotOutcomeCase(M_total_shelter, M_network_shelter, agentDataShelter, ...
+    dims, settings, 'shelter_aid');
+
+fprintf('  Transfers granted: %d\n', statsShelter.transfersGranted);
+fprintf('  Aid spent: %.2f (budget remaining: %.2f)\n', ...
+    statsShelter.totalAidSpent, statsShelter.finalBudget);
+
+%% 8. Report total runtime
+elapsedTime = toc;
+fprintf('\nFull script completed in %.2f seconds.\n', elapsedTime);
