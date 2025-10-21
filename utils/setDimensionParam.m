@@ -14,9 +14,9 @@ function dims = setDimensionParam()
 %   AUTHOR: Agustin Deambrosi
 %   LAST REVISED: April 2025
 
-    dims.N		= 6;                % Number of locations
-    dims.K		= 3;                % Productivity states
-    dims.B		= 3;                % Amenity states
+    dims.N		= 4;                % Number of locations
+    dims.K		= 6;                % Productivity states
+    dims.B		= 6;                % Amenity states
     dims.S		= dims.K * dims.B;  % Total joint state count (eta × psi)
     dims.H		= 2^dims.N;         % Number of help offer combinations
     dims.Na		= 15;               % Coarse asset grid

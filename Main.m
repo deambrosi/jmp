@@ -73,11 +73,12 @@ fprintf('\nEvaluating transportation-aid counterfactual...\n');
 
 transportAid = struct();
 transportAid.type            = 'transport';
-transportAid.startPeriod     = 5;                               % Aid becomes available from period 5 onwards
-transportAid.wealthThreshold = 4;                               % Eligible if asset index ≤ 4
-transportAid.massIncrease    = 0.04 * ones(dims.N, 1);          % Additional migrant mass outside destination 2
+transportAid.startPeriod     = 3;                               % Aid becomes available from period 5 onwards
+transportAid.wealthThreshold = 6;                               % Eligible if asset index ≤ 4
+transportAid.massIncrease    = 0.20 * ones(dims.N, 1);          % Additional migrant mass outside destination 2
 transportAid.massIncrease(2) = 0;                               % No artificial mass for location 2
-transportAid.budget          = 350;                             % Total funds E for the program
+transportAid.massIncrease(1) = 0;                               % No artificial mass for location 2
+transportAid.budget          = 3500;                            % Total funds E for the program
 
 try
     [pol_transport, M_transport, it_transport, ~] = solveDynamicEquilibrium( ...
@@ -114,11 +115,11 @@ fprintf('\nEvaluating food-and-shelter aid counterfactual...\n');
 
 shelterAid = struct();
 shelterAid.type             = 'shelter';
-shelterAid.startPeriod      = 4;             % Transfers available from period 4
-shelterAid.wealthThreshold  = 5;             % Eligible if asset index ≤ 5
-shelterAid.transferAmount   = 0.75;          % Wealth transfer when aid is granted
+shelterAid.startPeriod      = 3;             % Transfers available from period 4
+shelterAid.wealthThreshold  = 6;             % Eligible if asset index ≤ 5
+shelterAid.transferAmount   = 1.5;          % Wealth transfer when aid is granted
 shelterAid.grantProbability = 0.35;          % Probability of receiving a transfer
-shelterAid.budget           = 250;           % Total funds for the program
+shelterAid.budget           = 3500;           % Total funds for the program
 
 try
     [pol_shelter, M_shelter, it_shelter, ~] = solveDynamicEquilibrium( ...

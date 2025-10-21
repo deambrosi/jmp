@@ -40,8 +40,8 @@ function [grids, indexes] = setGridsAndIndices(dims)
     grids.ahgrid= nodeunif(dims.na, lb.a, ub.a);
 
     %% 2. Productivity and Amenity Grids
-    grids.eta	= linspace(0.5, 3, dims.K);
-    grids.psi	= linspace(0.2, 2.2, dims.B);
+    grids.eta	= linspace(0.2, 5, dims.K);
+    grids.psi	= linspace(0.5, 2.2, dims.B);
 
     %% 3. Indexing for V (Main state grid): (S, Na, N)
     [I_s, I_a, I_N] = ndgrid(1:dims.S, 1:dims.Na, 1:dims.N);

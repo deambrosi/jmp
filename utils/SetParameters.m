@@ -35,22 +35,22 @@ function params = SetParameters(dims, overrides)
     params.CONS   = 1e2;
 
     %% Location-specific features
-    params.A = [0.8; 1.2; 1.8; 2.1; 2.2; 3.2];
-    params.B = [1.5; 1.0; 1.2; 1.0; 1.0; 0.8];
+    params.A = [0.7; 1.3; 2; 4];
+    params.B = [1.5; 1.0; 1.0; 0.8];
 
     %% Migration cost primitives
-    params.tilde_ttau = [5; 0.5; 2; 3; 6];
-    params.hat_ttau   = [3; 1; 1; 1; 1; 9];
+    params.tilde_ttau = [5; 3; 9];
+    params.hat_ttau   = [3; 1; 2; 7];
     params.aalpha     = 0.5;
     params.nnu        = 0.1;
 
     %% Network-related parameters
     params.ggamma     = 0.25;
-    params.cchi       = 0.50;
+    params.cchi       = 0.05;
 
     %% Markov shocks
-    params.baseUp_eta = 0.08;
-    params.baseUp_psi = 0.05;
+    params.baseUp_eta = 0.10;
+    params.baseUp_psi = 0.10;
     shockProb         = 0.05;
     topDiff           = 1;
 

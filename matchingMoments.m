@@ -28,8 +28,8 @@ rng(12345);  % Reproducibility for the Monte Carlo simulation
 
 
 
-%cd('~/work/sample_proj/code');
-%addpath(genpath(pwd));
+cd('/storage/home/avd5992/Desktop/thesis-main'); 
+addpath(genpath(pwd));
 
 
 fprintf('*** Matching model moments ***\n');
