@@ -6,9 +6,10 @@ function [M_history, MIN_history, agentData, stats] = simulateAgentsTransportAid
 %   networked agents with wealth below a threshold starting in a given period.
 %   Agents compare migration outcomes under the benchmark help probabilities
 %   ("real") and the augmented probabilities induced by the program
-%   ("artificial"). Aid is granted only when the preferred destination differs
-%   across the two scenarios and sufficient funds remain to cover the implied
-%   subsidy.
+%   ("artificial"). Aid is granted whenever the augmented help vector supplies
+%   new assistance (either by changing the chosen destination or by unlocking
+%   help that was previously unavailable for the same destination) and
+%   sufficient funds remain to cover the implied subsidy.
 %
 %   INPUTS:
 %       m0        - [Nagents x 1] struct array of initial agent states
@@ -148,7 +149,11 @@ function [M_history, MIN_history, agentData, stats] = simulateAgentsTransportAid
                         [~, nextLoc_aug] = max(migProb_aug);
                     end
 
-                    if nextLoc_aug ~= nextLoc_real && helpMatrix(h_aug, nextLoc_aug) == 1
+                    hasAugmentedHelp = helpMatrix(h_aug, nextLoc_aug) == 1;
+                    hadBaselineHelp  = helpMatrix(h_real, nextLoc_aug) == 1;
+                    usesNewHelp      = hasAugmentedHelp && ~hadBaselineHelp;
+
+                    if usesNewHelp
                         grossCost = tauBase(loc, nextLoc_aug);
                         subsidy   = (1 - alpha) * grossCost;
                         if (stats.remainingBudget - subsidy) >= -1e-12 && subsidy > 0
