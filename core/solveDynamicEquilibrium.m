@@ -1,4 +1,4 @@
-function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibrium(M0, vf_terminal, m0, dims, params, grids, indexes, matrices, settings, aidParams)
+function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibrium(M0, vf_terminal, m0, dims, params, grids, indexes, matrices, settings, scenario)
 % SOLVEDYNAMICEQUILIBRIUM Solves for the dynamic migration equilibrium.
 %
 %   Iterates over the dynamic transition path of the economy using:
@@ -16,9 +16,15 @@ function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibrium(M0, vf_te
 %       indexes      - Indexing structures (struct)
 %       matrices     - Precomputed matrix structures (Ue, a_prime, A_prime)
 %       settings     - Simulation and iteration settings (struct)
-%       aidParams    - (optional) struct to apply temporary aid when computing
-%                      the forward simulation. If empty or omitted, no aid is
-%                      used.
+%       scenario     - Struct describing the scenario under consideration.
+%                      An empty struct (or omitted argument) runs the
+%                      benchmark without additional aid programs. Supported
+%                      types are:
+%                         .type = 'benchmark' (default)
+%                         .type = 'transport' with additional fields used by
+%                                  simulateAgentsTransportAid.m
+%                         .type = 'shelter'   with additional fields used by
+%                                  simulateAgentsShelterAid.m
 %
 %   OUTPUTS:
 %       pol_eqm   - Struct with converged dynamic policy functions (.a, .an, .mu, .mun)
@@ -29,6 +35,14 @@ function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibrium(M0, vf_te
 %   AUTHOR: Agustin Deambrosi
 %   LAST REVISED: April 2025
 % =========================================================================
+
+    if nargin < 10 || isempty(scenario)
+        scenario = struct();
+    end
+
+    if ~isfield(scenario, 'type') || isempty(scenario.type)
+        scenario.type = 'benchmark';
+    end
 
     %% 1. Initialization
     T               = settings.T;
@@ -49,13 +63,25 @@ function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibrium(M0, vf_te
         % Step 1: Policy functions via backward induction
         [vf_path, pol_new] = PolicyDynamics(M_eqm, vf_terminal, dims, params, grids, indexes, matrices, settings);
 
-        % Step 2: Forward simulation of agent dynamics
-        if nargin < 10 || isempty(aidParams)
-            [~, M_new, ~] = simulateAgents(m0, pol_new, repmat(params.G0, 1, T), ...
-                                           dims, params, grids, settings);
-        else
-            [~, M_new, ~, ~] = simulateAgentsWithAid(m0, pol_new, ...
-                repmat(params.G0, 1, T), dims, params, grids, settings, aidParams);
+        % Step 2: Forward simulation of agent dynamics under the scenario
+        G_path = zeros(dims.H, T);
+        for t = 1:T
+            G_path(:, t) = computeG(M_eqm(:, t), params.ggamma);
+        end
+
+        switch lower(string(scenario.type))
+            case "transport"
+                G_aug = computeTransportAidHelpPath(M_eqm, params, scenario, T);
+                [~, M_new, ~, ~] = simulateAgentsTransportAid(m0, pol_new, ...
+                    G_path, G_aug, dims, params, grids, settings, scenario);
+
+            case "shelter"
+                [~, M_new, ~, ~] = simulateAgentsShelterAid(m0, pol_new, ...
+                    G_path, dims, params, grids, settings, scenario);
+
+            otherwise
+                [~, M_new, ~] = simulateAgents(m0, pol_new, G_path, ...
+                    dims, params, grids, settings);
         end
 
         % Step 3: Compute weighted difference across periods
@@ -72,4 +98,38 @@ function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibrium(M0, vf_te
     % Final output
     pol_eqm = pol_new;
     % vf_path already contains value functions from the last iteration
+end
+
+%% ------------------------------------------------------------------------
+function G_aug = computeTransportAidHelpPath(M_path, params, scenario, T)
+% COMPUTETRANSPORTAIDHELPPATH Build augmented help distributions used by the
+% transportation-aid counterfactual. The augmented path is equal to the
+% benchmark help probabilities prior to the program start date and whenever
+% the additional mass is zero.
+
+    if ~isfield(scenario, 'massIncrease') || isempty(scenario.massIncrease)
+        error('Transportation aid scenario must include a massIncrease field.');
+    end
+
+    if ~isfield(scenario, 'startPeriod') || isempty(scenario.startPeriod)
+        error('Transportation aid scenario must include a startPeriod field.');
+    end
+
+    massIncrease = scenario.massIncrease(:);
+    if numel(massIncrease) == 1
+        massIncrease = repmat(massIncrease, size(M_path, 1), 1);
+    elseif numel(massIncrease) ~= size(M_path, 1)
+        error('massIncrease must be either a scalar or an N x 1 vector.');
+    end
+
+    startPeriod = max(1, min(T, scenario.startPeriod));
+
+    G_aug = zeros(size(params.G0, 1), T);
+    for t = 1:T
+        if t >= startPeriod
+            G_aug(:, t) = computeG(M_path(:, t) + massIncrease, params.ggamma);
+        else
+            G_aug(:, t) = computeG(M_path(:, t), params.ggamma);
+        end
+    end
 end

@@ -40,7 +40,7 @@ function modelMoments = simulatedMoments(paramOverrides, options)
     M0             = repmat(M_init, 1, settings.T);
 
     [pol_eqm, M_eqm, ~, ~] = solveDynamicEquilibrium(M0, vf_nh, m0, ...
-        dims, params, grids, indexes, matrices, settings, []);
+        dims, params, grids, indexes, matrices, settings, struct());
 
     G_dist = zeros(dims.H, settings.T);
     for t = 1:settings.T
