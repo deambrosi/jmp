@@ -68,7 +68,8 @@ function [M_history, MIN_history, agentData, stats] = simulateAgentsTransportAid
     alpha        = params.aalpha;
 
     % Mapping from help index to binary help vector
-    helpMatrix   = dec2bin(0:H-1) - '0';
+    helpMatrix   = dec2bin(0:H-1, numLocations) - '0';
+    powersOfTwo  = 2.^((numLocations-1):-1:0);
 
     % Initial conditions from m0
     for agentIdx = 1:numAgents
@@ -118,16 +119,18 @@ function [M_history, MIN_history, agentData, stats] = simulateAgentsTransportAid
                     h_real = H;
                 end
 
+                h_real_vec = helpMatrix(h_real, :);
+
                 migProb = squeeze(pol.mun{t}(sta, wea, loc, :, h_real));
                 migProb = migProb / sum(migProb);
                 u_move  = rand();
                 cumMig  = cumsum(migProb);
-                nextLoc_real = find(cumMig >= u_move, 1);
-                if isempty(nextLoc_real)
-                    [~, nextLoc_real] = max(migProb);
+                dest_real = find(cumMig >= u_move, 1);
+                if isempty(dest_real)
+                    [~, dest_real] = max(migProb);
                 end
 
-                dest_effective = nextLoc_real;
+                dest_effective = dest_real;
                 help_effective = h_real;
                 aidGranted     = false;
 
@@ -135,36 +138,39 @@ function [M_history, MIN_history, agentData, stats] = simulateAgentsTransportAid
                 eligible = isProgramActive && (wea <= wealthThreshold);
                 if eligible
                     G_aug_t = G_aug(:, t);
-                    cumGaug = cumsum(G_aug_t);
-                    h_aug   = find(cumGaug >= u_help, 1);
-                    if isempty(h_aug)
-                        h_aug = H;
+
+                    % Recover marginal help probabilities and construct
+                    % artificial mass that delivers the incremental help.
+                    P_base = (G_t.'    * helpMatrix);
+                    P_aug  = (G_aug_t.' * helpMatrix);
+                    denom  = max(1 - P_base, eps);
+                    p_art  = max(0, min(1, (P_aug - P_base) ./ denom));
+
+                    h_art_vec = double(rand(1, numLocations) < p_art);
+                    h_tilde_vec = max(h_real_vec, h_art_vec);
+                    h_union_idx = 1 + h_tilde_vec * powersOfTwo.';
+                    h_union_idx = round(h_union_idx);
+
+                    migProb_tilde = squeeze(pol.mun{t}(sta, wea, loc, :, h_union_idx));
+                    migProb_tilde = migProb_tilde / sum(migProb_tilde);
+                    cumMigTilde   = cumsum(migProb_tilde);
+                    dest_tilde    = find(cumMigTilde >= u_move, 1);
+                    if isempty(dest_tilde)
+                        [~, dest_tilde] = max(migProb_tilde);
                     end
 
-                    migProb_aug = squeeze(pol.mun{t}(sta, wea, loc, :, h_aug));
-                    migProb_aug = migProb_aug / sum(migProb_aug);
-                    cumMigAug   = cumsum(migProb_aug);
-                    nextLoc_aug = find(cumMigAug >= u_move, 1);
-                    if isempty(nextLoc_aug)
-                        [~, nextLoc_aug] = max(migProb_aug);
-                    end
-
-                    hasAugmentedHelp = helpMatrix(h_aug, nextLoc_aug) == 1;
-                    hadBaselineHelp  = helpMatrix(h_real, nextLoc_aug) == 1;
-                    usesNewHelp      = hasAugmentedHelp && ~hadBaselineHelp;
-
-                    if usesNewHelp
-                        grossCost = tauBase(loc, nextLoc_aug);
+                    if (dest_tilde ~= dest_real) && (dest_tilde ~= loc)
+                        grossCost = tauBase(loc, dest_tilde);
                         subsidy   = (1 - alpha) * grossCost;
                         if (stats.remainingBudget - subsidy) >= -1e-12 && subsidy > 0
-                            dest_effective = nextLoc_aug;
-                            help_effective = h_aug;
+                            dest_effective = dest_tilde;
+                            help_effective = h_union_idx;
                             aidGranted     = true;
 
                             stats.remainingBudget      = stats.remainingBudget - subsidy;
                             stats.totalAidSpent        = stats.totalAidSpent + subsidy;
                             stats.acceptedMoves        = stats.acceptedMoves + 1;
-                            stats.acceptedByDestination(nextLoc_aug) = stats.acceptedByDestination(nextLoc_aug) + 1;
+                            stats.acceptedByDestination(dest_tilde) = stats.acceptedByDestination(dest_tilde) + 1;
                             stats.aidSpendingTimeline(t)            = stats.aidSpendingTimeline(t) + subsidy;
                         end
                     end
