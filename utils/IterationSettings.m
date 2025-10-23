@@ -8,31 +8,37 @@ function settings = IterationSettings()
 %           .tolV     - Convergence tolerance for V
 %           .tolM     - Tolerance for migration convergence
 %           .MaxItV   - Max iterations for value function iteration
-%           .MaxIter  - Max iterations for outer algorithm
-%           .Nagents  - Number of agents in simulation
-%           .T        - Total time periods simulated
-%           .burn     - Burn-in periods removed before analysis
+%           .MaxItJ   - Max iterations for the outer equilibrium loop
+%           .MaxIter  - Safety cap on miscellaneous algorithms
+%           .Nagents  - Number of simulated agents
+%           .T        - Total simulation horizon
+%           .burn     - Burn-in periods removed from moment calculations
+%           .rngSeed  - Seed used to synchronize the Monte Carlo draws
 %
-%   AUTHOR: Agustin Deambrosi
-%   LAST REVISED: April 2025
+%   AUTHOR: Agustin Deambrosi (updated by ChatGPT)
+%   LAST REVISED: May 2025
 % =========================================================================
 
     %% Iteration counters and convergence values
-    settings.it		= 0;
-    settings.diffV	= 1;
+    settings.it         = 0;
+    settings.diffV      = 1;
 
     %% Tolerances
-    settings.tolV	= 0.5;
-    settings.tolM	= 1e-2;
+    settings.tolV       = 0.5;
+    settings.tolM       = 1e-2;
 
     %% Iteration limits
-    settings.MaxItV	= 40;
-    settings.MaxItJ	= 2;
-    settings.MaxIter= 100;
+    settings.MaxItV     = 40;
+    settings.MaxItJ     = 2;
+    settings.MaxIter    = 100;
 
     %% Simulation settings
-    settings.Nagents= 5000;
-    settings.T		= 100;
-    settings.burn	= 50;
+    settings.Nagents    = 5000;
+    settings.T          = 100;
+    settings.burn       = 50;
+
+    %% Random-number generator seed for reproducibility across scenarios
+    settings.rngSeed    = 12345;
 
 end
+
