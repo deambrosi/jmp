@@ -33,15 +33,15 @@ function [grids, indexes] = setGridsAndIndices(dims)
 
     %% 1. Asset Grids (coarse and fine)
     lb.a		= 0;          % Lower bound of asset holdings
-    ub.a		= 32;         % Upper bound of asset holdings
+    ub.a		= 30;         % Upper bound of asset holdings
     ca			= 3;          % Curvature for coarse grid
 
     grids.agrid	= nodeunif(dims.Na, 0, (ub.a - lb.a)^(1/ca)).^ca + lb.a;
     grids.ahgrid= nodeunif(dims.na, lb.a, ub.a);
 
     %% 2. Productivity and Amenity Grids
-    grids.eta	= linspace(0.2, 5, dims.K);
-    grids.psi	= linspace(0.5, 2.2, dims.B);
+    grids.eta	= linspace(0.8, 4, dims.K);
+    grids.psi	= linspace(0.7, 2.2, dims.B);
 
     %% 3. Indexing for V (Main state grid): (S, Na, N)
     [I_s, I_a, I_N] = ndgrid(1:dims.S, 1:dims.Na, 1:dims.N);

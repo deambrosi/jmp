@@ -78,7 +78,7 @@ transportAid.wealthThreshold = 13;                              % Eligible if as
 transportAid.massIncrease    = 0.90* ones(dims.N, 1);          % Additional migrant mass outside destination 2
 transportAid.massIncrease(2) = 0;                               % No artificial mass for location 2
 transportAid.massIncrease(1) = 0;                               % No artificial mass for location 2
-transportAid.budget          = 2000;                            % Total funds E for the program
+transportAid.budget          = 3000;                            % Total funds E for the program
 
 try
     [pol_transport, M_transport, it_transport, ~] = solveDynamicEquilibrium( ...
@@ -116,10 +116,10 @@ fprintf('\nEvaluating food-and-shelter aid counterfactual...\n');
 shelterAid = struct();
 shelterAid.type             = 'shelter';
 shelterAid.startPeriod      = 1;             % Transfers available from period 4
-shelterAid.wealthThreshold  = 7;             % Eligible if asset index ≤ 5
+shelterAid.wealthThreshold  = 8;             % Eligible if asset index ≤ 5
 shelterAid.transferAmount   = 0.7;          % Wealth transfer when aid is granted
-shelterAid.grantProbability = 0.60;          % Probability of receiving a transfer
-shelterAid.budget           = 2000;           % Total funds for the program
+shelterAid.grantProbability = 0.90;          % Probability of receiving a transfer
+shelterAid.budget           = 3000;           % Total funds for the program
 
 try
     [pol_shelter, M_shelter, it_shelter, ~] = solveDynamicEquilibrium( ...
