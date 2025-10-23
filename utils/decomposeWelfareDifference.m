@@ -45,9 +45,8 @@ function decomposition = decomposeWelfareDifference(counter, baseline, beta, mat
 
     Ttilde = ensureScalarHorizon(Ttilde);
 
-    if size(counterPanel, 2) < Ttilde || size(baselinePanel, 2) < Ttilde
-        error('Requested welfare horizon exceeds available value data.');
-    end
+    counterPanel  = padPanelToHorizon(counterPanel, Ttilde, 'counterfactual');
+    baselinePanel = padPanelToHorizon(baselinePanel, Ttilde, 'baseline');
 
     betaVec = beta .^ (1:Ttilde);
 
@@ -171,5 +170,26 @@ function horizon = ensureScalarHorizon(candidate)
 
     error('Unable to interpret welfare horizon of type %s as a scalar numeric.', ...
         class(candidate));
+end
+
+%% ------------------------------------------------------------------------
+function panel = padPanelToHorizon(panel, targetHorizon, panelName)
+% PADPANELTOHORIZON Extend a value panel by repeating the final observation.
+
+    currentHorizon = size(panel, 2);
+
+    if currentHorizon == 0
+        error('Value panel for %s scenario is empty; cannot extend horizon.', panelName);
+    end
+
+    if currentHorizon >= targetHorizon
+        panel = panel(:, 1:targetHorizon);
+        return;
+    end
+
+    deficit = targetHorizon - currentHorizon;
+    lastColumn = panel(:, currentHorizon);
+    padding = repmat(lastColumn, 1, deficit);
+    panel = [panel, padding];
 end
 
