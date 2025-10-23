@@ -52,7 +52,7 @@ function dynamics = TransitionDynamics(m0, T, ss, dims, params, grids, indexes, 
         fprintf('Outer iteration %d\n', iter);
         
         % Compute policy functions using the current guessed migration path.
-        din = PolicyDynamics(T, M_hat, ss, dims, params, grids, indexes, funcs);
+        din = PolicyDynamics(M_hat, ss, dims, params, grids, indexes, funcs, settings);
         
         % Simulate agents using the computed policies.
         M_new = simulateAgents(m0, din, T, dims, params, grids, settings);
