@@ -43,6 +43,8 @@ function decomposition = decomposeWelfareDifference(counter, baseline, beta, mat
         Ttilde = size(counterPanel, 2);
     end
 
+    Ttilde = ensureScalarHorizon(Ttilde);
+
     if size(counterPanel, 2) < Ttilde || size(baselinePanel, 2) < Ttilde
         error('Requested welfare horizon exceeds available value data.');
     end
@@ -139,5 +141,35 @@ function panel = extractNumericPanel(welfareStruct, fieldName)
     end
 
     error('Unsupported data type (%s) encountered in field "%s".', class(candidate), fieldName);
+end
+
+%% ------------------------------------------------------------------------
+function horizon = ensureScalarHorizon(candidate)
+% ENSURESCALARHORIZON Convert a generic horizon descriptor into a scalar.
+
+    if isnumeric(candidate) && isscalar(candidate)
+        horizon = double(candidate);
+        return;
+    end
+
+    if iscell(candidate) && numel(candidate) == 1 && isnumeric(candidate{1}) ...
+            && isscalar(candidate{1})
+        horizon = double(candidate{1});
+        return;
+    end
+
+    if isstruct(candidate)
+        fn = fieldnames(candidate);
+        for k = 1:numel(fn)
+            value = candidate.(fn{k});
+            if isnumeric(value) && isscalar(value)
+                horizon = double(value);
+                return;
+            end
+        end
+    end
+
+    error('Unable to interpret welfare horizon of type %s as a scalar numeric.', ...
+        class(candidate));
 end
 
