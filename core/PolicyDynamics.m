@@ -1,7 +1,7 @@
-function [vf_path, pol_path] = PolicyDynamics(M1, vf_terminal, dims, params, grids, indexes, matrices, settings)
+function [vf_path, pol_path] = PolicyDynamics(M1, vf_terminal, dims, params, grids, indexes, matrices, settings, helpOverride)
 % POLICYDYNAMICS Computes policy functions over the transition path.
 %
-%   [vf_path, pol_path] = PolicyDynamics(M1, vf_terminal, ...)
+%   [vf_path, pol_path] = PolicyDynamics(M1, vf_terminal, ..., helpOverride)
 %
 %   INPUTS:
 %       M1         - [N x T] matrix with guessed path of network agent distribution
@@ -12,6 +12,13 @@ function [vf_path, pol_path] = PolicyDynamics(M1, vf_terminal, dims, params, gri
 %       indexes    - Index structure for looping and vectorization
 %       matrices   - Struct with Ue, a_prime, A_prime
 %       settings   - Simulation/iteration controls
+%
+%   OPTIONAL INPUT:
+%       helpOverride - [H x T] matrix supplying exogenous help distributions
+%                      to be used at each date. When provided, the path is
+%                      used verbatim instead of computing it from M1. This is
+%                      useful for shutting down network effects while keeping
+%                      the rest of the equilibrium logic intact.
 %
 %   OUTPUTS:
 %       vf_path    - Cell array of value function structs over time
@@ -29,7 +36,15 @@ function [vf_path, pol_path] = PolicyDynamics(M1, vf_terminal, dims, params, gri
     pol_path.an        = cell(T, 1);
     pol_path.mu        = cell(T, 1);
     pol_path.mun       = cell(T, 1);
-    G_path0            = computeG(M1, params.ggamma);  % help vector distributions
+
+    if nargin < 9 || isempty(helpOverride)
+        G_path0 = computeG(M1, params.ggamma);   % help vector distributions from masses
+    else
+        G_path0 = helpOverride;
+        if size(G_path0, 2) ~= T
+            error('helpOverride must have T = %d columns.', T);
+        end
+    end
 
     vf_path{T}         = vf_terminal;  % Terminal condition
 
