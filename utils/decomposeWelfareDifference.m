@@ -30,17 +30,20 @@ function decomposition = decomposeWelfareDifference(counter, baseline, beta, mat
 %   DATE:   May 2025
 % =========================================================================
 
-    numAgents = size(counter.valuePanel, 1);
+    counterPanel  = extractNumericPanel(counter, 'valuePanel');
+    baselinePanel = extractNumericPanel(baseline, 'valuePanel');
+
+    numAgents = size(counterPanel, 1);
 
     if ~isempty(varargin)
         Ttilde = varargin{1};
     elseif isfield(counter, 'horizon')
         Ttilde = counter.horizon;
     else
-        Ttilde = size(counter.valuePanel, 2);
+        Ttilde = size(counterPanel, 2);
     end
 
-    if size(counter.valuePanel, 2) < Ttilde || size(baseline.valuePanel, 2) < Ttilde
+    if size(counterPanel, 2) < Ttilde || size(baselinePanel, 2) < Ttilde
         error('Requested welfare horizon exceeds available value data.');
     end
 
@@ -54,8 +57,8 @@ function decomposition = decomposeWelfareDifference(counter, baseline, beta, mat
     for iAgent = 1:numAgents
         jAgent = matchIdx(iAgent);
 
-        vc = counter.valuePanel(iAgent, 1:Ttilde);
-        vb = baseline.valuePanel(jAgent, 1:Ttilde);
+        vc = counterPanel(iAgent, 1:Ttilde);
+        vb = baselinePanel(jAgent, 1:Ttilde);
 
         diffSeries = vc - vb;
         perAgent.totalDifference(iAgent) = sum(betaVec .* diffSeries);
@@ -97,5 +100,44 @@ function decomposition = decomposeWelfareDifference(counter, baseline, beta, mat
 
     decomposition.perAgent  = perAgent;
     decomposition.aggregate = aggregate;
+end
+
+%% ------------------------------------------------------------------------
+function panel = extractNumericPanel(welfareStruct, fieldName)
+% EXTRACTNUMERICPANEL Safely obtain a numeric matrix from a welfare struct.
+
+    if ~isfield(welfareStruct, fieldName)
+        error('Missing field "%s" in welfare struct.', fieldName);
+    end
+
+    candidate = welfareStruct.(fieldName);
+
+    if isnumeric(candidate)
+        panel = candidate;
+        return;
+    end
+
+    if iscell(candidate)
+        try
+            panel = cell2mat(candidate);
+            return;
+        catch
+            error('Unable to convert cell array field "%s" into numeric matrix.', fieldName);
+        end
+    end
+
+    if isstruct(candidate)
+        fn = fieldnames(candidate);
+        for k = 1:numel(fn)
+            value = candidate.(fn{k});
+            if isnumeric(value)
+                panel = value;
+                return;
+            end
+        end
+        error('Field "%s" is a struct without numeric subfields.', fieldName);
+    end
+
+    error('Unsupported data type (%s) encountered in field "%s".', class(candidate), fieldName);
 end
 
