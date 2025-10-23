@@ -49,6 +49,7 @@ function [M_history, MIN_history, agentData] = simulateAgents(m0, pol, G_dist, d
     wealthTraj   = zeros(numAgents, T);
     stateTraj    = zeros(numAgents, T);
     networkTraj  = zeros(numAgents, T);
+    helpIndexTraj= ones(numAgents, T);
 
     %% 3. Simulation Loop
     parfor agentIdx = 1:numAgents
@@ -58,6 +59,7 @@ function [M_history, MIN_history, agentData] = simulateAgents(m0, pol, G_dist, d
         weaHist = zeros(1, T);
         staHist = zeros(1, T);
         netHist = zeros(1, T);
+        hHist   = ones(1, T);
 
         % Initial conditions
         loc  = agent.location;
@@ -84,6 +86,9 @@ function [M_history, MIN_history, agentData] = simulateAgents(m0, pol, G_dist, d
             if net == 1
                 G_t     = G_dist(:, t);
                 h_idx   = find(cumsum(G_t) >= rand(), 1);
+                if isempty(h_idx)
+                    h_idx = size(G_dist, 1);
+                end
                 migProb = squeeze(pol.mun{t}(sta, wea, loc, :, h_idx));
             else
                 migProb = squeeze(pol.mu{t}(sta, wea, loc, :));
@@ -123,6 +128,7 @@ function [M_history, MIN_history, agentData] = simulateAgents(m0, pol, G_dist, d
             weaHist(t+1) = wea;
             staHist(t+1) = sta;
             netHist(t+1) = net;
+            hHist(t+1) = h_idx;
         end
 
         % Save trajectories
@@ -130,6 +136,7 @@ function [M_history, MIN_history, agentData] = simulateAgents(m0, pol, G_dist, d
         wealthTraj(agentIdx, :)   = weaHist;
         stateTraj(agentIdx, :)    = staHist;
         networkTraj(agentIdx, :)  = netHist;
+        helpIndexTraj(agentIdx, :)= hHist;
     end
 
     %% 4. Aggregate Location Histories
@@ -145,8 +152,9 @@ function [M_history, MIN_history, agentData] = simulateAgents(m0, pol, G_dist, d
     end
 
     %% 5. Output full agent trajectories
-    agentData.location = locationTraj;
-    agentData.wealth   = wealthTraj;
-    agentData.state    = stateTraj;
-    agentData.network  = networkTraj;
+    agentData.location  = locationTraj;
+    agentData.wealth    = wealthTraj;
+    agentData.state     = stateTraj;
+    agentData.network   = networkTraj;
+    agentData.helpIndex = helpIndexTraj;
 end
