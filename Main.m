@@ -52,22 +52,59 @@ analysisHorizon = min(40, settings.T);   % \tilde{T}: welfare horizon shorter th
 transportMass = 0.90 * ones(dims.N, 1);
 transportMass(1:2) = 0;                  % No artificial mass in Venezuela or destination 2
 
-scenarioCatalog(1) = struct('name', 'benchmark', ...
-    'label', 'Benchmark', 'type', 'benchmark');
-scenarioCatalog(2) = struct('name', 'transport_t1', ...
-    'label', 'Transport Aid (start t=1)', 'type', 'transport', ...
-    'startPeriod', 1, 'wealthThreshold', 13, 'massIncrease', transportMass, 'budget', 3000);
-scenarioCatalog(3) = struct('name', 'transport_t6', ...
-    'label', 'Transport Aid (start t=6)', 'type', 'transport', ...
-    'startPeriod', 6, 'wealthThreshold', 13, 'massIncrease', transportMass, 'budget', 3000);
-scenarioCatalog(4) = struct('name', 'shelter_t1', ...
-    'label', 'Shelter Aid (start t=1)', 'type', 'shelter', ...
-    'startPeriod', 1, 'wealthThreshold', 8, 'transferAmount', 0.7, ...
-    'grantProbability', 0.90, 'budget', 3000);
-scenarioCatalog(5) = struct('name', 'shelter_t6', ...
-    'label', 'Shelter Aid (start t=6)', 'type', 'shelter', ...
-    'startPeriod', 6, 'wealthThreshold', 8, 'transferAmount', 0.7, ...
-    'grantProbability', 0.90, 'budget', 3000);
+scenarioTemplate = struct('name', '', 'label', '', 'type', '', ...
+    'startPeriod', NaN, 'wealthThreshold', NaN, 'massIncrease', [], ...
+    'budget', NaN, 'transferAmount', NaN, 'grantProbability', NaN);
+scenarioCatalog = repmat(scenarioTemplate, 5, 1);
+
+scenarioCatalog(1) = scenarioTemplate;
+scenarioCatalog(1).name             = 'benchmark';
+scenarioCatalog(1).label            = 'Benchmark';
+scenarioCatalog(1).type             = 'benchmark';
+scenarioCatalog(1).startPeriod      = 1;
+scenarioCatalog(1).wealthThreshold  = NaN;
+scenarioCatalog(1).massIncrease     = zeros(dims.N, 1);
+scenarioCatalog(1).budget           = NaN;
+scenarioCatalog(1).transferAmount   = NaN;
+scenarioCatalog(1).grantProbability = NaN;
+
+scenarioCatalog(2) = scenarioTemplate;
+scenarioCatalog(2).name             = 'transport_t1';
+scenarioCatalog(2).label            = 'Transport Aid (start t=1)';
+scenarioCatalog(2).type             = 'transport';
+scenarioCatalog(2).startPeriod      = 1;
+scenarioCatalog(2).wealthThreshold  = 13;
+scenarioCatalog(2).massIncrease     = transportMass;
+scenarioCatalog(2).budget           = 3000;
+
+scenarioCatalog(3) = scenarioTemplate;
+scenarioCatalog(3).name             = 'transport_t6';
+scenarioCatalog(3).label            = 'Transport Aid (start t=6)';
+scenarioCatalog(3).type             = 'transport';
+scenarioCatalog(3).startPeriod      = 6;
+scenarioCatalog(3).wealthThreshold  = 13;
+scenarioCatalog(3).massIncrease     = transportMass;
+scenarioCatalog(3).budget           = 3000;
+
+scenarioCatalog(4) = scenarioTemplate;
+scenarioCatalog(4).name             = 'shelter_t1';
+scenarioCatalog(4).label            = 'Shelter Aid (start t=1)';
+scenarioCatalog(4).type             = 'shelter';
+scenarioCatalog(4).startPeriod      = 1;
+scenarioCatalog(4).wealthThreshold  = 8;
+scenarioCatalog(4).budget           = 3000;
+scenarioCatalog(4).transferAmount   = 0.7;
+scenarioCatalog(4).grantProbability = 0.90;
+
+scenarioCatalog(5) = scenarioTemplate;
+scenarioCatalog(5).name             = 'shelter_t6';
+scenarioCatalog(5).label            = 'Shelter Aid (start t=6)';
+scenarioCatalog(5).type             = 'shelter';
+scenarioCatalog(5).startPeriod      = 6;
+scenarioCatalog(5).wealthThreshold  = 8;
+scenarioCatalog(5).budget           = 3000;
+scenarioCatalog(5).transferAmount   = 0.7;
+scenarioCatalog(5).grantProbability = 0.90;
 
 numScenarios = numel(scenarioCatalog);
 scenarioResults = repmat(struct('spec', [], 'withNetwork', [], 'withoutNetwork', [], ...
