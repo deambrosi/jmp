@@ -44,6 +44,10 @@ function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibrium(M0, vf_te
         scenario.type = 'benchmark';
     end
 
+    if ~isfield(scenario, 'helpMode') || isempty(scenario.helpMode)
+        scenario.helpMode = 'endogenous';
+    end
+
     %% 1. Initialization
     T               = settings.T;
     diffM           = 1;
@@ -61,17 +65,14 @@ function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibrium(M0, vf_te
         it_count = it_count + 1;
 
         % Step 1: Policy functions via backward induction
-        [vf_path, pol_new] = PolicyDynamics(M_eqm, vf_terminal, dims, params, grids, indexes, matrices, settings);
+        G_path = buildHelpPathForScenario(M_eqm, params, dims, scenario.helpMode);
+        [vf_path, pol_new] = PolicyDynamics(M_eqm, vf_terminal, dims, params, grids, indexes, matrices, settings, G_path);
 
         % Step 2: Forward simulation of agent dynamics under the scenario
-        G_path = zeros(dims.H, T);
-        for t = 1:T
-            G_path(:, t) = computeG(M_eqm(:, t), params.ggamma);
-        end
 
         switch lower(string(scenario.type))
             case "transport"
-                G_aug = computeTransportAidHelpPath(M_eqm, params, scenario, T);
+                G_aug = buildTransportAidHelpPath(M_eqm, params, scenario, G_path);
                 [~, M_new, ~, ~] = simulateAgentsTransportAid(m0, pol_new, ...
                     G_path, G_aug, dims, params, grids, settings, scenario);
 
@@ -98,38 +99,4 @@ function [pol_eqm, M_eqm, it_count, vf_path] = solveDynamicEquilibrium(M0, vf_te
     % Final output
     pol_eqm = pol_new;
     % vf_path already contains value functions from the last iteration
-end
-
-%% ------------------------------------------------------------------------
-function G_aug = computeTransportAidHelpPath(M_path, params, scenario, T)
-% COMPUTETRANSPORTAIDHELPPATH Build augmented help distributions used by the
-% transportation-aid counterfactual. The augmented path is equal to the
-% benchmark help probabilities prior to the program start date and whenever
-% the additional mass is zero.
-
-    if ~isfield(scenario, 'massIncrease') || isempty(scenario.massIncrease)
-        error('Transportation aid scenario must include a massIncrease field.');
-    end
-
-    if ~isfield(scenario, 'startPeriod') || isempty(scenario.startPeriod)
-        error('Transportation aid scenario must include a startPeriod field.');
-    end
-
-    massIncrease = scenario.massIncrease(:);
-    if numel(massIncrease) == 1
-        massIncrease = repmat(massIncrease, size(M_path, 1), 1);
-    elseif numel(massIncrease) ~= size(M_path, 1)
-        error('massIncrease must be either a scalar or an N x 1 vector.');
-    end
-
-    startPeriod = max(1, min(T, scenario.startPeriod));
-
-    G_aug = zeros(size(params.G0, 1), T);
-    for t = 1:T
-        if t >= startPeriod
-            G_aug(:, t) = computeG(M_path(:, t) + massIncrease, params.ggamma);
-        else
-            G_aug(:, t) = computeG(M_path(:, t), params.ggamma);
-        end
-    end
 end
