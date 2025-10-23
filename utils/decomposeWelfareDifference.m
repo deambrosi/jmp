@@ -144,32 +144,41 @@ end
 
 %% ------------------------------------------------------------------------
 function horizon = ensureScalarHorizon(candidate)
-% ENSURESCALARHORIZON Convert a generic horizon descriptor into a scalar.
+% ENSURESCALARHORIZON Convert a generic horizon descriptor into a scalar integer.
+
+    horizon = [];
 
     if isnumeric(candidate) && isscalar(candidate)
         horizon = double(candidate);
-        return;
-    end
-
-    if iscell(candidate) && numel(candidate) == 1 && isnumeric(candidate{1}) ...
+    elseif iscell(candidate) && numel(candidate) == 1 && isnumeric(candidate{1}) ...
             && isscalar(candidate{1})
         horizon = double(candidate{1});
-        return;
-    end
-
-    if isstruct(candidate)
+    elseif isstruct(candidate)
         fn = fieldnames(candidate);
         for k = 1:numel(fn)
             value = candidate.(fn{k});
             if isnumeric(value) && isscalar(value)
                 horizon = double(value);
-                return;
+                break;
             end
         end
     end
 
-    error('Unable to interpret welfare horizon of type %s as a scalar numeric.', ...
-        class(candidate));
+    if isempty(horizon)
+        error('Unable to interpret welfare horizon of type %s as a scalar numeric.', ...
+            class(candidate));
+    end
+
+    if ~isfinite(horizon) || horizon < 0
+        error('Welfare horizon must be a finite, non-negative scalar.');
+    end
+
+    rounded = round(horizon);
+    if abs(rounded - horizon) > 1e-8
+        warning('Welfare horizon %.10g is not an integer; rounding to %d.', horizon, rounded);
+    end
+
+    horizon = rounded;
 end
 
 %% ------------------------------------------------------------------------
@@ -187,7 +196,12 @@ function panel = padPanelToHorizon(panel, targetHorizon, panelName)
         return;
     end
 
-    deficit = targetHorizon - currentHorizon;
+    deficit = round(targetHorizon - currentHorizon);
+    if deficit <= 0
+        panel = panel(:, 1:targetHorizon);
+        return;
+    end
+
     lastColumn = panel(:, currentHorizon);
     padding = repmat(lastColumn, 1, deficit);
     panel = [panel, padding];
