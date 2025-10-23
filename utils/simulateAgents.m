@@ -59,6 +59,7 @@ function [M_history, MIN_history, agentData] = simulateAgents(m0, pol, G_dist, d
         weaHist = zeros(1, T);
         staHist = zeros(1, T);
         netHist = zeros(1, T);
+        hHist   = ones(1, T);
 
         % Initial conditions
         loc  = agent.location;
@@ -127,7 +128,7 @@ function [M_history, MIN_history, agentData] = simulateAgents(m0, pol, G_dist, d
             weaHist(t+1) = wea;
             staHist(t+1) = sta;
             netHist(t+1) = net;
-            helpIndexTraj(agentIdx, t+1) = h_idx;
+            hHist(t+1) = h_idx;
         end
 
         % Save trajectories
@@ -135,6 +136,7 @@ function [M_history, MIN_history, agentData] = simulateAgents(m0, pol, G_dist, d
         wealthTraj(agentIdx, :)   = weaHist;
         stateTraj(agentIdx, :)    = staHist;
         networkTraj(agentIdx, :)  = netHist;
+        helpIndexTraj(agentIdx, :)= hHist;
     end
 
     %% 4. Aggregate Location Histories
