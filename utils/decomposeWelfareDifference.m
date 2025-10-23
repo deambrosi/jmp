@@ -1,4 +1,4 @@
-function decomposition = decomposeWelfareDifference(counter, baseline, beta, matchIdx, timingCounter, timingBaseline, welfareHorizon)
+function decomposition = decomposeWelfareDifference(counter, baseline, beta, matchIdx, timingCounter, timingBaseline, varargin)
 % DECOMPOSEWELFAREDIFFERENCE Implements the three-way welfare decomposition.
 %
 %   decomposition = decomposeWelfareDifference(counter, baseline, beta,
@@ -14,7 +14,9 @@ function decomposition = decomposeWelfareDifference(counter, baseline, beta, mat
 %                           benchmark agents
 %       timingCounter     - Struct from computeMigrationTiming for scenario c
 %       timingBaseline    - Struct from computeMigrationTiming for scenario b
-%       welfareHorizon    - Horizon \tilde{T}
+%       welfareHorizon    - (Optional) Horizon \tilde{T}. If omitted the
+%                           function falls back to the welfare horizon stored
+%                           in the welfare structs.
 %
 %   OUTPUT:
 %       decomposition - Struct with fields:
@@ -29,8 +31,20 @@ function decomposition = decomposeWelfareDifference(counter, baseline, beta, mat
 % =========================================================================
 
     numAgents = size(counter.valuePanel, 1);
-    Ttilde    = welfareHorizon;
-    betaVec   = beta .^ (1:Ttilde);
+
+    if ~isempty(varargin)
+        Ttilde = varargin{1};
+    elseif isfield(counter, 'horizon')
+        Ttilde = counter.horizon;
+    else
+        Ttilde = size(counter.valuePanel, 2);
+    end
+
+    if size(counter.valuePanel, 2) < Ttilde || size(baseline.valuePanel, 2) < Ttilde
+        error('Requested welfare horizon exceeds available value data.');
+    end
+
+    betaVec = beta .^ (1:Ttilde);
 
     perAgent.leaveEarlier   = zeros(numAgents, 1);
     perAgent.pathQuality    = zeros(numAgents, 1);
