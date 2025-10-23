@@ -1,12 +1,16 @@
-%% Main Script: Solve the Steady-State and Transition Dynamics of the Model
-% This script performs the following:
+%% Main Script: Evaluate Benchmark and Policy Counterfactuals with Welfare Accounting
+% This script performs the following tasks:
 %   1. Initializes model parameters, grids, and functional forms.
 %   2. Solves for the steady-state value and policy functions assuming no help (G = G0).
-%   3. Solves the dynamic equilibrium through backward induction and forward simulation.
+%   3. Defines a catalogue of scenarios (benchmark plus counterfactual aid policies).
+%   4. For each scenario, solves the dynamic equilibrium, simulates agent histories,
+%      and computes discounted welfare over a user-defined horizon \tilde{T} < T.
+%   5. Repeats each scenario with network effects switched off to measure W^{\tilde{s}}.
+%   6. Implements the three-way welfare decomposition and produces summary tables.
 %
-% AUTHOR: Agustin Deambrosi
-% DATE: April 2025
-% VERSION: 2.1
+% AUTHOR: Agustin Deambrosi (extended by ChatGPT)
+% DATE: May 2025
+% VERSION: 3.0
 % =========================================================================
 
 clc; clear; close all;
@@ -42,108 +46,204 @@ M_init          = zeros(dims.N, 1);
 M_init(1)       = 1;
 M0              = repmat(M_init, 1, settings.T);  % [N x T] initial guess for M1
 
-%% 4. Solve Dynamic Equilibrium (Transition Path)
-fprintf('\nSolving Dynamic Equilibrium via Backward Induction and Simulation...\n');
-try
-    [pol_eqm, M_eqm, it_count, vf_path_eqm] = solveDynamicEquilibrium(M0, vf_nh, m0, dims, params, grids, indexes, matrices, settings, []);
-    fprintf('Dynamic equilibrium solved successfully in %d iterations.\n', it_count);
-catch ME
-    error('Error solving dynamic equilibrium: %s', ME.message);
+%% 4. Welfare Horizon and Scenario Catalogue
+analysisHorizon = min(40, settings.T);   % \tilde{T}: welfare horizon shorter than full simulation
+
+transportMass = 0.90 * ones(dims.N, 1);
+transportMass(1:2) = 0;                  % No artificial mass in Venezuela or destination 2
+
+scenarioTemplate = struct('name', '', 'label', '', 'type', '', ...
+    'startPeriod', NaN, 'wealthThreshold', NaN, 'massIncrease', [], ...
+    'budget', NaN, 'transferAmount', NaN, 'grantProbability', NaN);
+scenarioCatalog = repmat(scenarioTemplate, 5, 1);
+
+scenarioCatalog(1) = scenarioTemplate;
+scenarioCatalog(1).name             = 'benchmark';
+scenarioCatalog(1).label            = 'Benchmark';
+scenarioCatalog(1).type             = 'benchmark';
+scenarioCatalog(1).startPeriod      = 1;
+scenarioCatalog(1).wealthThreshold  = NaN;
+scenarioCatalog(1).massIncrease     = zeros(dims.N, 1);
+scenarioCatalog(1).budget           = NaN;
+scenarioCatalog(1).transferAmount   = NaN;
+scenarioCatalog(1).grantProbability = NaN;
+
+scenarioCatalog(2) = scenarioTemplate;
+scenarioCatalog(2).name             = 'transport_t1';
+scenarioCatalog(2).label            = 'Transport Aid (start t=1)';
+scenarioCatalog(2).type             = 'transport';
+scenarioCatalog(2).startPeriod      = 1;
+scenarioCatalog(2).wealthThreshold  = 13;
+scenarioCatalog(2).massIncrease     = transportMass;
+scenarioCatalog(2).budget           = 3000;
+
+scenarioCatalog(3) = scenarioTemplate;
+scenarioCatalog(3).name             = 'transport_t6';
+scenarioCatalog(3).label            = 'Transport Aid (start t=6)';
+scenarioCatalog(3).type             = 'transport';
+scenarioCatalog(3).startPeriod      = 6;
+scenarioCatalog(3).wealthThreshold  = 13;
+scenarioCatalog(3).massIncrease     = transportMass;
+scenarioCatalog(3).budget           = 3000;
+
+scenarioCatalog(4) = scenarioTemplate;
+scenarioCatalog(4).name             = 'shelter_t1';
+scenarioCatalog(4).label            = 'Shelter Aid (start t=1)';
+scenarioCatalog(4).type             = 'shelter';
+scenarioCatalog(4).startPeriod      = 1;
+scenarioCatalog(4).wealthThreshold  = 8;
+scenarioCatalog(4).budget           = 3000;
+scenarioCatalog(4).transferAmount   = 0.7;
+scenarioCatalog(4).grantProbability = 0.90;
+
+scenarioCatalog(5) = scenarioTemplate;
+scenarioCatalog(5).name             = 'shelter_t6';
+scenarioCatalog(5).label            = 'Shelter Aid (start t=6)';
+scenarioCatalog(5).type             = 'shelter';
+scenarioCatalog(5).startPeriod      = 6;
+scenarioCatalog(5).wealthThreshold  = 8;
+scenarioCatalog(5).budget           = 3000;
+scenarioCatalog(5).transferAmount   = 0.7;
+scenarioCatalog(5).grantProbability = 0.90;
+
+numScenarios = numel(scenarioCatalog);
+scenarioResults = repmat(struct('spec', [], 'withNetwork', [], 'withoutNetwork', [], ...
+    'networkDecomp', [], 'comparisonDecomp', []), numScenarios, 1);
+
+%% 5. Solve and Evaluate Each Scenario
+fprintf('\nEvaluating benchmark and counterfactual scenarios...\n');
+
+for sIdx = 1:numScenarios
+    spec = scenarioCatalog(sIdx);
+    spec.helpMode = 'endogenous';
+
+    seedOffset = (sIdx - 1) * 100;
+
+    fprintf('\n  -> %s (with network effects)\n', spec.label);
+    scenarioWith = runScenario(spec, seedOffset, true, M0, vf_nh, m0, dims, params, ...
+        grids, indexes, matrices, settings, analysisHorizon);
+
+    fprintf('  -> %s (network effects disabled)\n', spec.label);
+    specNoNet = spec;
+    specNoNet.helpMode = 'none';
+    scenarioWithout = runScenario(specNoNet, seedOffset, false, M0, vf_nh, m0, dims, ...
+        params, grids, indexes, matrices, settings, analysisHorizon);
+
+    identityMatch = (1:settings.Nagents)';
+    networkDecomp = decomposeWelfareDifference(scenarioWith.welfare, scenarioWithout.welfare, ...
+        params.bbeta, identityMatch, scenarioWith.timing, scenarioWithout.timing, analysisHorizon);
+
+    scenarioResults(sIdx).spec            = spec;
+    scenarioResults(sIdx).withNetwork     = scenarioWith;
+    scenarioResults(sIdx).withoutNetwork  = scenarioWithout;
+    scenarioResults(sIdx).networkDecomp   = networkDecomp;
+    scenarioResults(sIdx).comparisonDecomp= [];
 end
 
-%% 5. Simulate Final Trajectories Using Converged Policy
-fprintf('\nSimulating Agent Paths Using Converged Policies...\n');
-try
-    % Compute final G_t path from converged M_eqm
-    G_dist = zeros(dims.H, settings.T);
-    for t = 1:settings.T
-        G_dist(:, t) = computeG(M_eqm(:, t), params.ggamma);
-    end
+benchmarkResult = scenarioResults(1);
 
-    [M_total, M_network, agentData] = simulateAgents(m0, pol_eqm, G_dist, dims, params, grids, settings);
-    fprintf('Simulation completed successfully.\n');
-catch ME
-    error('Error during final simulation: %s', ME.message);
+for sIdx = 2:numScenarios
+    matchIdx = matchAgentsForDecomposition(m0, benchmarkResult.withNetwork.timing, ...
+        scenarioResults(sIdx).withNetwork.timing, settings, sIdx);
+    compDecomp = decomposeWelfareDifference(scenarioResults(sIdx).withNetwork.welfare, ...
+        benchmarkResult.withNetwork.welfare, params.bbeta, matchIdx, ...
+        scenarioResults(sIdx).withNetwork.timing, benchmarkResult.withNetwork.timing, ...
+        analysisHorizon);
+    scenarioResults(sIdx).comparisonDecomp = compDecomp;
 end
 
-plotOutcomeCase(M_total, M_network, agentData, dims, settings, 'benchmark');
+%% 6. Summaries and Persistence
+baselineTotal = benchmarkResult.withNetwork.welfare.total;
 
-%% 6. Transportation Aid Counterfactual
-fprintf('\nEvaluating transportation-aid counterfactual...\n');
-
-transportAid = struct();
-transportAid.type            = 'transport';
-transportAid.startPeriod     = 1;                               % Aid becomes available from period 5 onwards
-transportAid.wealthThreshold = 13;                              % Eligible if asset index ≤ 4
-transportAid.massIncrease    = 0.90* ones(dims.N, 1);          % Additional migrant mass outside destination 2
-transportAid.massIncrease(2) = 0;                               % No artificial mass for location 2
-transportAid.massIncrease(1) = 0;                               % No artificial mass for location 2
-transportAid.budget          = 3000;                            % Total funds E for the program
-
-try
-    [pol_transport, M_transport, it_transport, ~] = solveDynamicEquilibrium( ...
-        M0, vf_nh, m0, dims, params, grids, indexes, matrices, settings, transportAid);
-    fprintf('Transportation-aid equilibrium solved in %d iterations.\n', it_transport);
-catch ME
-    error('Error solving transport-aid counterfactual: %s', ME.message);
-end
-
-G_transport_base = zeros(dims.H, settings.T);
-G_transport_aug  = zeros(dims.H, settings.T);
-for t = 1:settings.T
-    G_transport_base(:, t) = computeG(M_transport(:, t), params.ggamma);
-    if t >= transportAid.startPeriod
-        G_transport_aug(:, t) = computeG(M_transport(:, t) + transportAid.massIncrease, params.ggamma);
+summaries = repmat(struct(), numScenarios, 1);
+for sIdx = 1:numScenarios
+    spec = scenarioResults(sIdx).spec;
+    compDecomp = scenarioResults(sIdx).comparisonDecomp;
+    if isempty(compDecomp)
+        baseTotal = NaN;
     else
-        G_transport_aug(:, t) = G_transport_base(:, t);
+        baseTotal = baselineTotal;
     end
+    summaries(sIdx) = summarizeWelfareComparison(spec.label, ...
+        scenarioResults(sIdx).withNetwork.welfare, ...
+        scenarioResults(sIdx).withoutNetwork.welfare, ...
+        scenarioResults(sIdx).networkDecomp, baseTotal, compDecomp);
 end
 
-[M_total_transport, M_network_transport, agentDataTransport, statsTransport] = ...
-    simulateAgentsTransportAid(m0, pol_transport, G_transport_base, G_transport_aug, ...
-    dims, params, grids, settings, transportAid);
+scenarioNames           = {summaries.label}';
+totalWelfare            = [summaries.totalWelfare]';
+noNetworkWelfare        = [summaries.totalWithoutNetwork]';
+networkGain             = [summaries.networkGain]';
+networkPercent          = [summaries.networkPct]';
+vsBenchmarkGain         = arrayfun(@(s) extractComparisonMetric(s, 'absoluteGain'), summaries);
+vsBenchmarkPercent      = arrayfun(@(s) extractComparisonMetric(s, 'percentGain'), summaries);
 
-plotOutcomeCase(M_total_transport, M_network_transport, agentDataTransport, ...
-    dims, settings, 'transport_aid');
+welfareTable = table(scenarioNames, totalWelfare, noNetworkWelfare, networkGain, ...
+    networkPercent, vsBenchmarkGain, vsBenchmarkPercent, ...
+    'VariableNames', {'Scenario','TotalW','NoNetworkW','NetworkGain','NetworkPct', ...
+    'VsBenchmarkGain','VsBenchmarkPct'});
 
-fprintf('  Accepted moves with aid: %d\n', statsTransport.acceptedMoves);
-fprintf('  Aid spent: %.2f (budget remaining: %.2f)\n', ...
-    statsTransport.totalAidSpent, statsTransport.finalBudget);
-
-%% 7. Food-and-Shelter Aid Counterfactual
-fprintf('\nEvaluating food-and-shelter aid counterfactual...\n');
-
-shelterAid = struct();
-shelterAid.type             = 'shelter';
-shelterAid.startPeriod      = 1;             % Transfers available from period 4
-shelterAid.wealthThreshold  = 8;             % Eligible if asset index ≤ 5
-shelterAid.transferAmount   = 0.7;          % Wealth transfer when aid is granted
-shelterAid.grantProbability = 0.90;          % Probability of receiving a transfer
-shelterAid.budget           = 3000;           % Total funds for the program
-
-try
-    [pol_shelter, M_shelter, it_shelter, ~] = solveDynamicEquilibrium( ...
-        M0, vf_nh, m0, dims, params, grids, indexes, matrices, settings, shelterAid);
-    fprintf('Shelter-aid equilibrium solved in %d iterations.\n', it_shelter);
-catch ME
-    error('Error solving shelter-aid counterfactual: %s', ME.message);
+resultsDir = fullfile('results', 'welfare');
+if ~exist(resultsDir, 'dir')
+    mkdir(resultsDir);
 end
 
-G_shelter = zeros(dims.H, settings.T);
-for t = 1:settings.T
-    G_shelter(:, t) = computeG(M_shelter(:, t), params.ggamma);
-end
+writetable(welfareTable, fullfile(resultsDir, 'welfare_summary.csv'));
+save(fullfile(resultsDir, 'scenario_results.mat'), 'scenarioResults', 'summaries', 'analysisHorizon');
 
-[M_total_shelter, M_network_shelter, agentDataShelter, statsShelter] = ...
-    simulateAgentsShelterAid(m0, pol_shelter, G_shelter, dims, params, grids, settings, shelterAid);
+fprintf('\nWelfare summary (values in levels and percentages):\n');
+disp(welfareTable);
 
-plotOutcomeCase(M_total_shelter, M_network_shelter, agentDataShelter, ...
-    dims, settings, 'shelter_aid');
-
-fprintf('  Transfers granted: %d\n', statsShelter.transfersGranted);
-fprintf('  Aid spent: %.2f (budget remaining: %.2f)\n', ...
-    statsShelter.totalAidSpent, statsShelter.finalBudget);
-
-%% 8. Report total runtime
+%% 7. Report total runtime
 elapsedTime = toc;
 fprintf('\nFull script completed in %.2f seconds.\n', elapsedTime);
+
+%% ------------------------------------------------------------------------
+function scenarioOutput = runScenario(spec, seedOffset, shouldPlot, M0, vf_terminal, m0, ...
+    dims, params, grids, indexes, matrices, settings, analysisHorizon)
+% RUNSCENARIO Solve equilibrium and simulate agents for a single scenario.
+
+    rng(settings.rngSeed + seedOffset, 'twister');
+
+    [pol_eqm, M_eqm, iterations, vf_path] = solveDynamicEquilibrium(M0, vf_terminal, ...
+        m0, dims, params, grids, indexes, matrices, settings, spec);
+
+    baseHelp = buildHelpPathForScenario(M_eqm, params, dims, spec.helpMode);
+
+    switch lower(string(spec.type))
+        case "transport"
+            G_aug = buildTransportAidHelpPath(M_eqm, params, spec, baseHelp);
+            [M_total, M_network, agentData, stats] = simulateAgentsTransportAid(m0, pol_eqm, ...
+                baseHelp, G_aug, dims, params, grids, settings, spec);
+        case "shelter"
+            [M_total, M_network, agentData, stats] = simulateAgentsShelterAid(m0, pol_eqm, ...
+                baseHelp, dims, params, grids, settings, spec);
+        otherwise
+            [M_total, M_network, agentData] = simulateAgents(m0, pol_eqm, baseHelp, ...
+                dims, params, grids, settings);
+            stats = struct();
+    end
+
+    if shouldPlot
+        plotOutcomeCase(M_total, M_network, agentData, dims, settings, spec.name);
+    end
+
+    welfare = computeScenarioWelfare(vf_path, agentData, params, dims, analysisHorizon);
+    timing  = computeMigrationTiming(agentData, analysisHorizon);
+
+    scenarioOutput = struct('spec', spec, 'policy', pol_eqm, 'M', M_eqm, ...
+        'iterations', iterations, 'vf_path', vf_path, 'agentData', agentData, ...
+        'stats', stats, 'welfare', welfare, 'timing', timing, ...
+        'M_total', M_total, 'M_network', M_network);
+end
+
+%% ------------------------------------------------------------------------
+function value = extractComparisonMetric(summaryStruct, fieldName)
+% EXTRACTCOMPARISONMETRIC Safely obtain a metric from the benchmark comparison.
+
+    if isempty(summaryStruct.vsBenchmark)
+        value = NaN;
+    else
+        value = summaryStruct.vsBenchmark.(fieldName);
+    end
+end
